@@ -1,0 +1,610 @@
+import java.util.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+// Main SuperStore Application Class
+public class SuperStore {
+    // In-memory data storage
+    private static Map<String, User> users = new HashMap<>();
+    private static Map<String, Product> inventory = new HashMap<>();
+    private static Map<String, Order> orders = new HashMap<>();
+    private static Scanner scanner = new Scanner(System.in);
+    private static User currentUser = null;
+    
+    public static void main(String[] args) {
+        System.out.println("=== Welcome to Super Store ===");
+        
+        // Initialize with sample data
+        initializeSampleData();
+        
+        // Main application loop
+        while (true) {
+            if (currentUser == null) {
+                showLoginMenu();
+            } else {
+                if (currentUser.getUserType() == UserType.BUYER) {
+                    showBuyerMenu();
+                } else {
+                    showSellerMenu();
+                }
+            }
+        }
+    }
+    
+    // Initialize sample data for testing
+    private static void initializeSampleData() {
+        // Create sample seller
+        User seller = new User("seller1", hashPassword("seller123"), UserType.SELLER);
+        users.put("seller1", seller);
+        
+        // Create sample buyer
+        User buyer = new User("buyer1", hashPassword("buyer123"), UserType.BUYER);
+        users.put("buyer1", buyer);
+        
+        // Add sample products
+        Product laptop = new Product("P001", "Gaming Laptop", 50000.0, 10, "seller1");
+        Product phone = new Product("P002", "Smartphone", 25000.0, 20, "seller1");
+        inventory.put("P001", laptop);
+        inventory.put("P002", phone);
+        
+        System.out.println("Sample data loaded:");
+        System.out.println("Seller - Username: seller1, Password: seller123");
+        System.out.println("Buyer - Username: buyer1, Password: buyer123");
+        System.out.println();
+    }
+    
+    // Display login/registration menu
+    private static void showLoginMenu() {
+        System.out.println("\n--- Login Menu ---");
+        System.out.println("1. Login");
+        System.out.println("2. Register");
+        System.out.println("3. Exit");
+        System.out.print("Choose option: ");
+        
+        int choice = getIntInput();
+        switch (choice) {
+            case 1:
+                login();
+                break;
+            case 2:
+                register();
+                break;
+            case 3:
+                System.out.println("Thank you for using Super Store!");
+                System.exit(0);
+                break;
+            default:
+                System.out.println("Invalid option!");
+        }
+    }
+    
+    // User login functionality
+    private static void login() {
+        System.out.print("Enter username: ");
+        String username = scanner.nextLine();
+        System.out.print("Enter password: ");
+        String password = scanner.nextLine();
+        
+        // Validate credentials
+        User user = users.get(username);
+        if (user != null && user.getPasswordHash().equals(hashPassword(password))) {
+            currentUser = user;
+            System.out.println("Login successful! Welcome " + username);
+        } else {
+            System.out.println("Invalid credentials!");
+        }
+    }
+    
+    // User registration functionality
+    private static void register() {
+        System.out.print("Enter username: ");
+        String username = scanner.nextLine();
+        
+        // Check if username already exists
+        if (users.containsKey(username)) {
+            System.out.println("Username already exists!");
+            return;
+        }
+        
+        System.out.print("Enter password: ");
+        String password = scanner.nextLine();
+        
+        // Password validation
+        if (!isValidPassword(password)) {
+            System.out.println("Password must be at least 6 characters long!");
+            return;
+        }
+        
+        System.out.println("Select user type:");
+        System.out.println("1. Buyer");
+        System.out.println("2. Seller");
+        System.out.print("Choose: ");
+        
+        int typeChoice = getIntInput();
+        UserType userType = (typeChoice == 2) ? UserType.SELLER : UserType.BUYER;
+        
+        // Create new user with encrypted password
+        User newUser = new User(username, hashPassword(password), userType);
+        users.put(username, newUser);
+        
+        System.out.println("Registration successful!");
+    }
+    
+    // Show buyer menu options
+    private static void showBuyerMenu() {
+        System.out.println("\n--- Buyer Menu ---");
+        System.out.println("1. View Products");
+        System.out.println("2. Add to Cart");
+        System.out.println("3. View Cart");
+        System.out.println("4. Place Order");
+        System.out.println("5. View My Orders");
+        System.out.println("6. Logout");
+        System.out.print("Choose option: ");
+        
+        int choice = getIntInput();
+        switch (choice) {
+            case 1:
+                listInventory();
+                break;
+            case 2:
+                addToCart();
+                break;
+            case 3:
+                viewCart();
+                break;
+            case 4:
+                placeOrder();
+                break;
+            case 5:
+                viewMyOrders();
+                break;
+            case 6:
+                logout();
+                break;
+            default:
+                System.out.println("Invalid option!");
+        }
+    }
+    
+    // Show seller menu options
+    private static void showSellerMenu() {
+        System.out.println("\n--- Seller Menu ---");
+        System.out.println("1. View My Products");
+        System.out.println("2. Add Product");
+        System.out.println("3. Update Product");
+        System.out.println("4. View All Orders");
+        System.out.println("5. Logout");
+        System.out.print("Choose option: ");
+        
+        int choice = getIntInput();
+        switch (choice) {
+            case 1:
+                viewMyProducts();
+                break;
+            case 2:
+                addItem();
+                break;
+            case 3:
+                updateItem();
+                break;
+            case 4:
+                viewAllOrders();
+                break;
+            case 5:
+                logout();
+                break;
+            default:
+                System.out.println("Invalid option!");
+        }
+    }
+    
+    // INVENTORY SERVICE OPERATIONS
+    
+    // Add new product to inventory
+    private static void addItem() {
+        System.out.print("Enter product ID: ");
+        String productId = scanner.nextLine();
+        
+        // Check if product ID already exists
+        if (inventory.containsKey(productId)) {
+            System.out.println("Product ID already exists!");
+            return;
+        }
+        
+        System.out.print("Enter product name: ");
+        String name = scanner.nextLine();
+        System.out.print("Enter price: ");
+        double price = getDoubleInput();
+        System.out.print("Enter quantity: ");
+        int quantity = getIntInput();
+        
+        // Create and add new product
+        Product product = new Product(productId, name, price, quantity, currentUser.getUsername());
+        inventory.put(productId, product);
+        
+        System.out.println("Product added successfully!");
+    }
+    
+    // Update existing product
+    private static void updateItem() {
+        viewMyProducts();
+        System.out.print("Enter product ID to update: ");
+        String productId = scanner.nextLine();
+        
+        Product product = inventory.get(productId);
+        if (product == null || !product.getSellerId().equals(currentUser.getUsername())) {
+            System.out.println("Product not found or not owned by you!");
+            return;
+        }
+        
+        System.out.println("Current details: " + product);
+        System.out.print("Enter new name (or press Enter to keep current): ");
+        String name = scanner.nextLine();
+        if (!name.trim().isEmpty()) {
+            product.setName(name);
+        }
+        
+        System.out.print("Enter new price (or 0 to keep current): ");
+        double price = getDoubleInput();
+        if (price > 0) {
+            product.setPrice(price);
+        }
+        
+        System.out.print("Enter new quantity (or -1 to keep current): ");
+        int quantity = getIntInput();
+        if (quantity >= 0) {
+            product.setQuantity(quantity);
+        }
+        
+        System.out.println("Product updated successfully!");
+    }
+    
+    // List all available products
+    private static void listInventory() {
+        System.out.println("\n--- Available Products ---");
+        if (inventory.isEmpty()) {
+            System.out.println("No products available!");
+            return;
+        }
+        
+        for (Product product : inventory.values()) {
+            if (product.getQuantity() > 0) {
+                System.out.println(product);
+            }
+        }
+    }
+    
+    // CART AND ORDER OPERATIONS
+    
+    // Add item to buyer's cart
+    private static void addToCart() {
+        listInventory();
+        System.out.print("Enter product ID to add to cart: ");
+        String productId = scanner.nextLine();
+        
+        Product product = inventory.get(productId);
+        if (product == null) {
+            System.out.println("Product not found!");
+            return;
+        }
+        
+        if (product.getQuantity() <= 0) {
+            System.out.println("Product out of stock!");
+            return;
+        }
+        
+        System.out.print("Enter quantity: ");
+        int quantity = getIntInput();
+        
+        if (quantity > product.getQuantity()) {
+            System.out.println("Insufficient stock! Available: " + product.getQuantity());
+            return;
+        }
+        
+        // Add to cart
+        CartItem cartItem = new CartItem(productId, product.getName(), product.getPrice(), quantity);
+        currentUser.addToCart(cartItem);
+        
+        System.out.println("Item added to cart successfully!");
+    }
+    
+    // View cart contents
+    private static void viewCart() {
+        System.out.println("\n--- Your Cart ---");
+        List<CartItem> cart = currentUser.getCart();
+        
+        if (cart.isEmpty()) {
+            System.out.println("Cart is empty!");
+            return;
+        }
+        
+        double total = 0;
+        for (CartItem item : cart) {
+            System.out.println(item);
+            total += item.getPrice() * item.getQuantity();
+        }
+        System.out.println("Total Amount: ₹" + total);
+    }
+    
+    // Place order from cart
+    private static void placeOrder() {
+        List<CartItem> cart = currentUser.getCart();
+        if (cart.isEmpty()) {
+            System.out.println("Cart is empty!");
+            return;
+        }
+        
+        // Validate inventory before placing order
+        for (CartItem item : cart) {
+            Product product = inventory.get(item.getProductId());
+            if (product == null || product.getQuantity() < item.getQuantity()) {
+                System.out.println("Insufficient stock for " + item.getName());
+                return;
+            }
+        }
+        
+        // Calculate total amount
+        double totalAmount = 0;
+        for (CartItem item : cart) {
+            totalAmount += item.getPrice() * item.getQuantity();
+        }
+        
+        System.out.println("Total Amount: ₹" + totalAmount);
+        
+        // Process payment
+        if (makePayment(totalAmount)) {
+            // Create order
+            String orderId = "ORD" + System.currentTimeMillis();
+            Order order = new Order(orderId, currentUser.getUsername(), new ArrayList<>(cart), totalAmount);
+            orders.put(orderId, order);
+            
+            // Update inventory
+            for (CartItem item : cart) {
+                Product product = inventory.get(item.getProductId());
+                product.setQuantity(product.getQuantity() - item.getQuantity());
+            }
+            
+            // Clear cart
+            currentUser.clearCart();
+            
+            System.out.println("Order placed successfully! Order ID: " + orderId);
+        }
+    }
+    
+    // PAYMENT SERVICE
+    
+    // Process payment (simplified simulation)
+    private static boolean makePayment(double amount) {
+        System.out.println("\n--- Payment Process ---");
+        System.out.println("Amount to pay: ₹" + amount);
+        System.out.println("Select payment method:");
+        System.out.println("1. Credit Card");
+        System.out.println("2. Debit Card");
+        System.out.println("3. UPI");
+        System.out.println("4. Cancel");
+        System.out.print("Choose: ");
+        
+        int choice = getIntInput();
+        if (choice == 4) {
+            System.out.println("Payment cancelled!");
+            return false;
+        }
+        
+        String paymentMethod = "";
+        switch (choice) {
+            case 1: paymentMethod = "Credit Card"; break;
+            case 2: paymentMethod = "Debit Card"; break;
+            case 3: paymentMethod = "UPI"; break;
+            default: 
+                System.out.println("Invalid payment method!");
+                return false;
+        }
+        
+        // Simulate payment processing
+        System.out.print("Enter payment details (any text): ");
+        scanner.nextLine();
+        
+        System.out.println("Processing payment...");
+        try {
+            Thread.sleep(2000); // Simulate processing time
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        System.out.println("Payment successful via " + paymentMethod + "!");
+        return true;
+    }
+    
+    // VIEW OPERATIONS
+    
+    // View seller's products
+    private static void viewMyProducts() {
+        System.out.println("\n--- My Products ---");
+        boolean found = false;
+        for (Product product : inventory.values()) {
+            if (product.getSellerId().equals(currentUser.getUsername())) {
+                System.out.println(product);
+                found = true;
+            }
+        }
+        if (!found) {
+            System.out.println("No products found!");
+        }
+    }
+    
+    // View buyer's orders
+    private static void viewMyOrders() {
+        System.out.println("\n--- My Orders ---");
+        boolean found = false;
+        for (Order order : orders.values()) {
+            if (order.getBuyerId().equals(currentUser.getUsername())) {
+                System.out.println(order);
+                found = true;
+            }
+        }
+        if (!found) {
+            System.out.println("No orders found!");
+        }
+    }
+    
+    // View all orders (for sellers)
+    private static void viewAllOrders() {
+        System.out.println("\n--- All Orders ---");
+        if (orders.isEmpty()) {
+            System.out.println("No orders found!");
+            return;
+        }
+        
+        for (Order order : orders.values()) {
+            // Show orders that contain seller's products
+            boolean hasSellerProduct = false;
+            for (CartItem item : order.getItems()) {
+                Product product = inventory.get(item.getProductId());
+                if (product != null && product.getSellerId().equals(currentUser.getUsername())) {
+                    hasSellerProduct = true;
+                    break;
+                }
+            }
+            if (hasSellerProduct) {
+                System.out.println(order);
+            }
+        }
+    }
+    
+    // UTILITY METHODS
+    
+    // Logout current user
+    private static void logout() {
+        System.out.println("Logged out successfully!");
+        currentUser = null;
+    }
+    
+    // Password validation
+    private static boolean isValidPassword(String password) {
+        return password != null && password.length() >= 6;
+    }
+    
+    // Hash password using SHA-256
+    private static String hashPassword(String password) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(password.getBytes());
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
+    }
+    
+    // Safe integer input
+    private static int getIntInput() {
+        try {
+            int value = Integer.parseInt(scanner.nextLine());
+            return value;
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid input! Please enter a number.");
+            return 0;
+        }
+    }
+    
+    // Safe double input
+    private static double getDoubleInput() {
+        try {
+            double value = Double.parseDouble(scanner.nextLine());
+            return value;
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid input! Please enter a valid number.");
+            return 0.0;
+        }
+    }
+}
+
+// USER MANAGEMENT CLASSES
+
+// User type enumeration
+enum UserType {
+    BUYER, SELLER
+}
+
+// User class for profile service
+class User {
+    private String username;
+    private String passwordHash;
+    private UserType userType;
+    private List<CartItem> cart;
+    
+    public User(String username, String passwordHash, UserType userType) {
+        this.username = username;
+        this.passwordHash = passwordHash;
+        this.userType = userType;
+        this.cart = new ArrayList<>();
+    }
+    
+    // Getters and setters
+    public String getUsername() { return username; }
+    public String getPasswordHash() { return passwordHash; }
+    public UserType getUserType() { return userType; }
+    public List<CartItem> getCart() { return cart; }
+    
+    // Cart operations
+    public void addToCart(CartItem item) {
+        // Check if item already exists in cart
+        for (CartItem existingItem : cart) {
+            if (existingItem.getProductId().equals(item.getProductId())) {
+                existingItem.setQuantity(existingItem.getQuantity() + item.getQuantity());
+                return;
+            }
+        }
+        cart.add(item);
+    }
+    
+    public void clearCart() {
+        cart.clear();
+    }
+    
+    @Override
+    public String toString() {
+        return "User{username='" + username + "', type=" + userType + "}";
+    }
+}
+
+// PRODUCT AND INVENTORY CLASSES
+
+// Product class for inventory service
+class Product {
+    private String productId;
+    private String name;
+    private double price;
+    private int quantity;
+    private String sellerId;
+    
+    public Product(String productId, String name, double price, int quantity, String sellerId) {
+        this.productId = productId;
+        this.name = name;
+        this.price = price;
+        this.quantity = quantity;
+        this.sellerId = sellerId;
+    }
+    
+    // Getters and setters
+    public String getProductId() { return productId; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getPrice() { return price; }
+    public void setPrice(double price) { this.price = price; }
+    public int getQuantity() { return quantity; }
+    public void setQuantity(int quantity) { this.quantity = quantity; }
+    public String getSellerId() { return sellerId; }
+    
+    @Override
+    public String toString() {
+        return String.format("Product{ID='%s', Name='%s
