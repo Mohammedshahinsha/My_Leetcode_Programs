@@ -4,23 +4,48 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-// Main SuperStore Application Class
+// Main SuperStore Application Class - Entry Point
 public class SuperStore {
-    // In-memory data storage
-    private static Map<String, User> users = new HashMap<>();
-    private static Map<String, Product> inventory = new HashMap<>();
-    private static Map<String, Order> orders = new HashMap<>();
-    private static Scanner scanner = new Scanner(System.in);
-    private static User currentUser = null;
-    
     public static void main(String[] args) {
+        // Create application instance and start
+        SuperStoreApplication app = new SuperStoreApplication();
+        app.start();
+    }
+}
+
+// Main Application Controller Class
+class SuperStoreApplication {
+    // Services - Dynamic instances
+    private ProfileService profileService;
+    private InventoryService inventoryService;
+    private OrderService orderService;
+    private PaymentService paymentService;
+    
+    // Application state
+    private Scanner scanner;
+    private User currentUser;
+    private boolean running;
+    
+    // Constructor - Initialize all services and components
+    public SuperStoreApplication() {
+        this.profileService = new ProfileService();
+        this.inventoryService = new InventoryService();
+        this.orderService = new OrderService();
+        this.paymentService = new PaymentService();
+        this.scanner = new Scanner(System.in);
+        this.currentUser = null;
+        this.running = true;
+        
+        // Initialize sample data for testing
+        initializeSampleData();
+    }
+    
+    // Start the application
+    public void start() {
         System.out.println("=== Welcome to Super Store ===");
         
-        // Initialize with sample data
-        initializeSampleData();
-        
         // Main application loop
-        while (true) {
+        while (running) {
             if (currentUser == null) {
                 showLoginMenu();
             } else {
@@ -31,23 +56,27 @@ public class SuperStore {
                 }
             }
         }
+        
+        // Cleanup
+        scanner.close();
+        System.out.println("Thank you for using Super Store!");
     }
     
     // Initialize sample data for testing
-    private static void initializeSampleData() {
+    private void initializeSampleData() {
         // Create sample seller
         User seller = new User("seller1", hashPassword("seller123"), UserType.SELLER);
-        users.put("seller1", seller);
+        profileService.addUser(seller);
         
         // Create sample buyer
         User buyer = new User("buyer1", hashPassword("buyer123"), UserType.BUYER);
-        users.put("buyer1", buyer);
+        profileService.addUser(buyer);
         
         // Add sample products
         Product laptop = new Product("P001", "Gaming Laptop", 50000.0, 10, "seller1");
         Product phone = new Product("P002", "Smartphone", 25000.0, 20, "seller1");
-        inventory.put("P001", laptop);
-        inventory.put("P002", phone);
+        inventoryService.addProduct(laptop);
+        inventoryService.addProduct(phone);
         
         System.out.println("Sample data loaded:");
         System.out.println("Seller - Username: seller1, Password: seller123");
@@ -56,7 +85,7 @@ public class SuperStore {
     }
     
     // Display login/registration menu
-    private static void showLoginMenu() {
+    private void showLoginMenu() {
         System.out.println("\n--- Login Menu ---");
         System.out.println("1. Login");
         System.out.println("2. Register");
@@ -66,30 +95,29 @@ public class SuperStore {
         int choice = getIntInput();
         switch (choice) {
             case 1:
-                login();
+                handleLogin();
                 break;
             case 2:
-                register();
+                handleRegister();
                 break;
             case 3:
-                System.out.println("Thank you for using Super Store!");
-                System.exit(0);
+                running = false;
                 break;
             default:
                 System.out.println("Invalid option!");
         }
     }
     
-    // User login functionality
-    private static void login() {
+    // Handle user login
+    private void handleLogin() {
         System.out.print("Enter username: ");
         String username = scanner.nextLine();
         System.out.print("Enter password: ");
         String password = scanner.nextLine();
         
-        // Validate credentials
-        User user = users.get(username);
-        if (user != null && user.getPasswordHash().equals(hashPassword(password))) {
+        // Authenticate user through profile service
+        User user = profileService.authenticateUser(username, hashPassword(password));
+        if (user != null) {
             currentUser = user;
             System.out.println("Login successful! Welcome " + username);
         } else {
@@ -97,13 +125,13 @@ public class SuperStore {
         }
     }
     
-    // User registration functionality
-    private static void register() {
+    // Handle user registration
+    private void handleRegister() {
         System.out.print("Enter username: ");
         String username = scanner.nextLine();
         
-        // Check if username already exists
-        if (users.containsKey(username)) {
+        // Check if username already exists through profile service
+        if (profileService.userExists(username)) {
             System.out.println("Username already exists!");
             return;
         }
@@ -125,15 +153,15 @@ public class SuperStore {
         int typeChoice = getIntInput();
         UserType userType = (typeChoice == 2) ? UserType.SELLER : UserType.BUYER;
         
-        // Create new user with encrypted password
+        // Create new user and register through profile service
         User newUser = new User(username, hashPassword(password), userType);
-        users.put(username, newUser);
+        profileService.addUser(newUser);
         
         System.out.println("Registration successful!");
     }
     
     // Show buyer menu options
-    private static void showBuyerMenu() {
+    private void showBuyerMenu() {
         System.out.println("\n--- Buyer Menu ---");
         System.out.println("1. View Products");
         System.out.println("2. Add to Cart");
@@ -146,22 +174,22 @@ public class SuperStore {
         int choice = getIntInput();
         switch (choice) {
             case 1:
-                listInventory();
+                handleListInventory();
                 break;
             case 2:
-                addToCart();
+                handleAddToCart();
                 break;
             case 3:
-                viewCart();
+                handleViewCart();
                 break;
             case 4:
-                placeOrder();
+                handlePlaceOrder();
                 break;
             case 5:
-                viewMyOrders();
+                handleViewMyOrders();
                 break;
             case 6:
-                logout();
+                handleLogout();
                 break;
             default:
                 System.out.println("Invalid option!");
@@ -169,7 +197,7 @@ public class SuperStore {
     }
     
     // Show seller menu options
-    private static void showSellerMenu() {
+    private void showSellerMenu() {
         System.out.println("\n--- Seller Menu ---");
         System.out.println("1. View My Products");
         System.out.println("2. Add Product");
@@ -181,34 +209,34 @@ public class SuperStore {
         int choice = getIntInput();
         switch (choice) {
             case 1:
-                viewMyProducts();
+                handleViewMyProducts();
                 break;
             case 2:
-                addItem();
+                handleAddItem();
                 break;
             case 3:
-                updateItem();
+                handleUpdateItem();
                 break;
             case 4:
-                viewAllOrders();
+                handleViewAllOrders();
                 break;
             case 5:
-                logout();
+                handleLogout();
                 break;
             default:
                 System.out.println("Invalid option!");
         }
     }
     
-    // INVENTORY SERVICE OPERATIONS
+    // INVENTORY SERVICE OPERATIONS - Dynamic Methods
     
     // Add new product to inventory
-    private static void addItem() {
+    private void handleAddItem() {
         System.out.print("Enter product ID: ");
         String productId = scanner.nextLine();
         
-        // Check if product ID already exists
-        if (inventory.containsKey(productId)) {
+        // Check if product ID already exists through inventory service
+        if (inventoryService.productExists(productId)) {
             System.out.println("Product ID already exists!");
             return;
         }
@@ -220,20 +248,20 @@ public class SuperStore {
         System.out.print("Enter quantity: ");
         int quantity = getIntInput();
         
-        // Create and add new product
+        // Create and add new product through inventory service
         Product product = new Product(productId, name, price, quantity, currentUser.getUsername());
-        inventory.put(productId, product);
+        inventoryService.addProduct(product);
         
         System.out.println("Product added successfully!");
     }
     
     // Update existing product
-    private static void updateItem() {
-        viewMyProducts();
+    private void handleUpdateItem() {
+        handleViewMyProducts();
         System.out.print("Enter product ID to update: ");
         String productId = scanner.nextLine();
         
-        Product product = inventory.get(productId);
+        Product product = inventoryService.getProduct(productId);
         if (product == null || !product.getSellerId().equals(currentUser.getUsername())) {
             System.out.println("Product not found or not owned by you!");
             return;
@@ -242,49 +270,41 @@ public class SuperStore {
         System.out.println("Current details: " + product);
         System.out.print("Enter new name (or press Enter to keep current): ");
         String name = scanner.nextLine();
-        if (!name.trim().isEmpty()) {
-            product.setName(name);
-        }
-        
         System.out.print("Enter new price (or 0 to keep current): ");
         double price = getDoubleInput();
-        if (price > 0) {
-            product.setPrice(price);
-        }
-        
         System.out.print("Enter new quantity (or -1 to keep current): ");
         int quantity = getIntInput();
-        if (quantity >= 0) {
-            product.setQuantity(quantity);
-        }
+        
+        // Update product through inventory service
+        inventoryService.updateProduct(productId, name, price, quantity);
         
         System.out.println("Product updated successfully!");
     }
     
     // List all available products
-    private static void listInventory() {
+    private void handleListInventory() {
         System.out.println("\n--- Available Products ---");
-        if (inventory.isEmpty()) {
+        List<Product> products = inventoryService.getAllAvailableProducts();
+        
+        if (products.isEmpty()) {
             System.out.println("No products available!");
             return;
         }
         
-        for (Product product : inventory.values()) {
-            if (product.getQuantity() > 0) {
-                System.out.println(product);
-            }
+        for (Product product : products) {
+            System.out.println(product);
         }
     }
     
-    // CART AND ORDER OPERATIONS
+    // CART AND ORDER OPERATIONS - Dynamic Methods
     
     // Add item to buyer's cart
-    private static void addToCart() {
-        listInventory();
+    private void handleAddToCart() {
+        handleListInventory();
         System.out.print("Enter product ID to add to cart: ");
         String productId = scanner.nextLine();
         
-        Product product = inventory.get(productId);
+        Product product = inventoryService.getProduct(productId);
         if (product == null) {
             System.out.println("Product not found!");
             return;
@@ -303,7 +323,7 @@ public class SuperStore {
             return;
         }
         
-        // Add to cart
+        // Add to cart through current user
         CartItem cartItem = new CartItem(productId, product.getName(), product.getPrice(), quantity);
         currentUser.addToCart(cartItem);
         
@@ -311,7 +331,7 @@ public class SuperStore {
     }
     
     // View cart contents
-    private static void viewCart() {
+    private void handleViewCart() {
         System.out.println("\n--- Your Cart ---");
         List<CartItem> cart = currentUser.getCart();
         
@@ -329,165 +349,98 @@ public class SuperStore {
     }
     
     // Place order from cart
-    private static void placeOrder() {
+    private void handlePlaceOrder() {
         List<CartItem> cart = currentUser.getCart();
         if (cart.isEmpty()) {
             System.out.println("Cart is empty!");
             return;
         }
         
-        // Validate inventory before placing order
-        for (CartItem item : cart) {
-            Product product = inventory.get(item.getProductId());
-            if (product == null || product.getQuantity() < item.getQuantity()) {
-                System.out.println("Insufficient stock for " + item.getName());
-                return;
-            }
+        // Validate inventory before placing order through order service
+        if (!orderService.validateInventory(cart, inventoryService)) {
+            System.out.println("Some items in cart are out of stock!");
+            return;
         }
         
         // Calculate total amount
-        double totalAmount = 0;
-        for (CartItem item : cart) {
-            totalAmount += item.getPrice() * item.getQuantity();
-        }
-        
+        double totalAmount = orderService.calculateTotal(cart);
         System.out.println("Total Amount: ₹" + totalAmount);
         
-        // Process payment
-        if (makePayment(totalAmount)) {
-            // Create order
-            String orderId = "ORD" + System.currentTimeMillis();
-            Order order = new Order(orderId, currentUser.getUsername(), new ArrayList<>(cart), totalAmount);
-            orders.put(orderId, order);
+        // Process payment through payment service
+        if (paymentService.processPayment(totalAmount, scanner)) {
+            // Create order through order service
+            Order order = orderService.createOrder(currentUser.getUsername(), cart, totalAmount);
             
-            // Update inventory
-            for (CartItem item : cart) {
-                Product product = inventory.get(item.getProductId());
-                product.setQuantity(product.getQuantity() - item.getQuantity());
-            }
+            // Update inventory through inventory service
+            inventoryService.updateInventoryAfterOrder(cart);
             
             // Clear cart
             currentUser.clearCart();
             
-            System.out.println("Order placed successfully! Order ID: " + orderId);
-        }
-    }
-    
-    // PAYMENT SERVICE
-    
-    // Process payment (simplified simulation)
-    private static boolean makePayment(double amount) {
-        System.out.println("\n--- Payment Process ---");
-        System.out.println("Amount to pay: ₹" + amount);
-        System.out.println("Select payment method:");
-        System.out.println("1. Credit Card");
-        System.out.println("2. Debit Card");
-        System.out.println("3. UPI");
-        System.out.println("4. Cancel");
-        System.out.print("Choose: ");
-        
-        int choice = getIntInput();
-        if (choice == 4) {
-            System.out.println("Payment cancelled!");
-            return false;
-        }
-        
-        String paymentMethod = "";
-        switch (choice) {
-            case 1: paymentMethod = "Credit Card"; break;
-            case 2: paymentMethod = "Debit Card"; break;
-            case 3: paymentMethod = "UPI"; break;
-            default: 
-                System.out.println("Invalid payment method!");
-                return false;
-        }
-        
-        // Simulate payment processing
-        System.out.print("Enter payment details (any text): ");
-        scanner.nextLine();
-        
-        System.out.println("Processing payment...");
-        try {
-            Thread.sleep(2000); // Simulate processing time
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        
-        System.out.println("Payment successful via " + paymentMethod + "!");
-        return true;
-    }
-    
-    // VIEW OPERATIONS
-    
-    // View seller's products
-    private static void viewMyProducts() {
-        System.out.println("\n--- My Products ---");
-        boolean found = false;
-        for (Product product : inventory.values()) {
-            if (product.getSellerId().equals(currentUser.getUsername())) {
-                System.out.println(product);
-                found = true;
-            }
-        }
-        if (!found) {
-            System.out.println("No products found!");
+            System.out.println("Order placed successfully! Order ID: " + order.getOrderId());
         }
     }
     
     // View buyer's orders
-    private static void viewMyOrders() {
+    private void handleViewMyOrders() {
         System.out.println("\n--- My Orders ---");
-        boolean found = false;
-        for (Order order : orders.values()) {
-            if (order.getBuyerId().equals(currentUser.getUsername())) {
-                System.out.println(order);
-                found = true;
-            }
-        }
-        if (!found) {
-            System.out.println("No orders found!");
-        }
-    }
-    
-    // View all orders (for sellers)
-    private static void viewAllOrders() {
-        System.out.println("\n--- All Orders ---");
-        if (orders.isEmpty()) {
+        List<Order> userOrders = orderService.getOrdersByBuyer(currentUser.getUsername());
+        
+        if (userOrders.isEmpty()) {
             System.out.println("No orders found!");
             return;
         }
         
-        for (Order order : orders.values()) {
-            // Show orders that contain seller's products
-            boolean hasSellerProduct = false;
-            for (CartItem item : order.getItems()) {
-                Product product = inventory.get(item.getProductId());
-                if (product != null && product.getSellerId().equals(currentUser.getUsername())) {
-                    hasSellerProduct = true;
-                    break;
-                }
-            }
-            if (hasSellerProduct) {
-                System.out.println(order);
-            }
+        for (Order order : userOrders) {
+            System.out.println(order);
         }
     }
     
-    // UTILITY METHODS
+    // View seller's products
+    private void handleViewMyProducts() {
+        System.out.println("\n--- My Products ---");
+        List<Product> sellerProducts = inventoryService.getProductsBySeller(currentUser.getUsername());
+        
+        if (sellerProducts.isEmpty()) {
+            System.out.println("No products found!");
+            return;
+        }
+        
+        for (Product product : sellerProducts) {
+            System.out.println(product);
+        }
+    }
+    
+    // View all orders (for sellers)
+    private void handleViewAllOrders() {
+        System.out.println("\n--- Orders for My Products ---");
+        List<Order> sellerOrders = orderService.getOrdersForSeller(currentUser.getUsername(), inventoryService);
+        
+        if (sellerOrders.isEmpty()) {
+            System.out.println("No orders found!");
+            return;
+        }
+        
+        for (Order order : sellerOrders) {
+            System.out.println(order);
+        }
+    }
     
     // Logout current user
-    private static void logout() {
+    private void handleLogout() {
         System.out.println("Logged out successfully!");
         currentUser = null;
     }
     
+    // UTILITY METHODS
+    
     // Password validation
-    private static boolean isValidPassword(String password) {
+    private boolean isValidPassword(String password) {
         return password != null && password.length() >= 6;
     }
     
     // Hash password using SHA-256
-    private static String hashPassword(String password) {
+    private String hashPassword(String password) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(password.getBytes());
@@ -506,7 +459,7 @@ public class SuperStore {
     }
     
     // Safe integer input
-    private static int getIntInput() {
+    private int getIntInput() {
         try {
             int value = Integer.parseInt(scanner.nextLine());
             return value;
@@ -517,7 +470,7 @@ public class SuperStore {
     }
     
     // Safe double input
-    private static double getDoubleInput() {
+    private double getDoubleInput() {
         try {
             double value = Double.parseDouble(scanner.nextLine());
             return value;
@@ -528,83 +481,131 @@ public class SuperStore {
     }
 }
 
-// USER MANAGEMENT CLASSES
-
-// User type enumeration
-enum UserType {
-    BUYER, SELLER
-}
-
-// User class for profile service
-class User {
-    private String username;
-    private String passwordHash;
-    private UserType userType;
-    private List<CartItem> cart;
+// PROFILE SERVICE CLASS - Dynamic User Management
+class ProfileService {
+    private Map<String, User> users;
     
-    public User(String username, String passwordHash, UserType userType) {
-        this.username = username;
-        this.passwordHash = passwordHash;
-        this.userType = userType;
-        this.cart = new ArrayList<>();
+    public ProfileService() {
+        this.users = new HashMap<>();
     }
     
-    // Getters and setters
-    public String getUsername() { return username; }
-    public String getPasswordHash() { return passwordHash; }
-    public UserType getUserType() { return userType; }
-    public List<CartItem> getCart() { return cart; }
+    // Add new user to the system
+    public void addUser(User user) {
+        users.put(user.getUsername(), user);
+    }
     
-    // Cart operations
-    public void addToCart(CartItem item) {
-        // Check if item already exists in cart
-        for (CartItem existingItem : cart) {
-            if (existingItem.getProductId().equals(item.getProductId())) {
-                existingItem.setQuantity(existingItem.getQuantity() + item.getQuantity());
-                return;
+    // Check if user exists
+    public boolean userExists(String username) {
+        return users.containsKey(username);
+    }
+    
+    // Authenticate user with credentials
+    public User authenticateUser(String username, String passwordHash) {
+        User user = users.get(username);
+        if (user != null && user.getPasswordHash().equals(passwordHash)) {
+            return user;
+        }
+        return null;
+    }
+    
+    // Get user by username
+    public User getUser(String username) {
+        return users.get(username);
+    }
+    
+    // Get all users
+    public List<User> getAllUsers() {
+        return new ArrayList<>(users.values());
+    }
+}
+
+// INVENTORY SERVICE CLASS - Dynamic Product Management
+class InventoryService {
+    private Map<String, Product> products;
+    
+    public InventoryService() {
+        this.products = new HashMap<>();
+    }
+    
+    // Add new product
+    public void addProduct(Product product) {
+        products.put(product.getProductId(), product);
+    }
+    
+    // Check if product exists
+    public boolean productExists(String productId) {
+        return products.containsKey(productId);
+    }
+    
+    // Get product by ID
+    public Product getProduct(String productId) {
+        return products.get(productId);
+    }
+    
+    // Update existing product
+    public void updateProduct(String productId, String name, double price, int quantity) {
+        Product product = products.get(productId);
+        if (product != null) {
+            if (name != null && !name.trim().isEmpty()) {
+                product.setName(name);
+            }
+            if (price > 0) {
+                product.setPrice(price);
+            }
+            if (quantity >= 0) {
+                product.setQuantity(quantity);
             }
         }
-        cart.add(item);
     }
     
-    public void clearCart() {
-        cart.clear();
+    // Get all available products (with stock > 0)
+    public List<Product> getAllAvailableProducts() {
+        List<Product> availableProducts = new ArrayList<>();
+        for (Product product : products.values()) {
+            if (product.getQuantity() > 0) {
+                availableProducts.add(product);
+            }
+        }
+        return availableProducts;
     }
     
-    @Override
-    public String toString() {
-        return "User{username='" + username + "', type=" + userType + "}";
+    // Get products by specific seller
+    public List<Product> getProductsBySeller(String sellerId) {
+        List<Product> sellerProducts = new ArrayList<>();
+        for (Product product : products.values()) {
+            if (product.getSellerId().equals(sellerId)) {
+                sellerProducts.add(product);
+            }
+        }
+        return sellerProducts;
+    }
+    
+    // Update inventory after order placement
+    public void updateInventoryAfterOrder(List<CartItem> cartItems) {
+        for (CartItem item : cartItems) {
+            Product product = products.get(item.getProductId());
+            if (product != null) {
+                product.setQuantity(product.getQuantity() - item.getQuantity());
+            }
+        }
     }
 }
 
-// PRODUCT AND INVENTORY CLASSES
-
-// Product class for inventory service
-class Product {
-    private String productId;
-    private String name;
-    private double price;
-    private int quantity;
-    private String sellerId;
+// ORDER SERVICE CLASS - Dynamic Order Management
+class OrderService {
+    private Map<String, Order> orders;
     
-    public Product(String productId, String name, double price, int quantity, String sellerId) {
-        this.productId = productId;
-        this.name = name;
-        this.price = price;
-        this.quantity = quantity;
-        this.sellerId = sellerId;
+    public OrderService() {
+        this.orders = new HashMap<>();
     }
     
-    // Getters and setters
-    public String getProductId() { return productId; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public double getPrice() { return price; }
-    public void setPrice(double price) { this.price = price; }
-    public int getQuantity() { return quantity; }
-    public void setQuantity(int quantity) { this.quantity = quantity; }
-    public String getSellerId() { return sellerId; }
+    // Create new order
+    public Order createOrder(String buyerId, List<CartItem> items, double totalAmount) {
+        String orderId = "ORD" + System.currentTimeMillis();
+        Order order = new Order(orderId, buyerId, items, totalAmount);
+        orders.put(orderId, order);
+        return order;
+    }
     
-    @Override
-    public String toString() {
-        return String.format("Product{ID='%s', Name='%s
+    // Validate inventory before order placement
+    pub
